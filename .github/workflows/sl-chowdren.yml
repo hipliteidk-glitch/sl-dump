@@ -33,6 +33,14 @@ jobs:
           ls -l rt.7z
           7z x -y rt.7z -ort > /dev/null
           chmod -R +x rt/bin rt/toolchain/bin rt/python27/bin 2>/dev/null || true
+          # gl4es presents a desktop-GL profile that never advertises
+          # GL_KHR_texture_compression_astc_ldr, so ASTC blobs are fatal on the
+          # console: "ASTC extension ... not present on this driver; ASTC images
+          # will be reported as errors instead of uploaded", one error per image,
+          # no textures. imageworker.py only enables ASTC when this encoder is
+          # present *and* executable, so moving it aside makes the converter emit
+          # zlib-compressed images - the format this runtime expects behind gl4es.
+          mv rt/tools/astcenc-native rt/tools/astcenc-native.disabled
           echo "--- runtime ---"
           ls -l rt
           file rt/python27/bin/python2.7 rt/toolchain/bin/gccc
@@ -88,6 +96,16 @@ jobs:
             grep 'left as MP3' build.log | tail -1
             exit 1
           fi
+          if grep -q 'Using ASTC' build.log; then
+            echo "ERROR: images were ASTC-compressed; gl4es cannot sample ASTC"
+            exit 1
+          fi
+          if ! grep -q 'Falling back to zlib' build.log; then
+            echo "ERROR: no zlib-compressed images in build.log - check imageworker.py"
+            exit 1
+          fi
+          echo "--- image compression ---"
+          echo "zlib images: $(grep -c 'Falling back to zlib' build.log)"
           echo "--- required glibc versions (ArkOS target is >= 2.34) ---"
           strings -a port/build/Chowdren | grep -o 'GLIBC_2\.[0-9]*' | sort -uV | tail -5
 
