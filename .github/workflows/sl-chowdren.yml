@@ -35,8 +35,10 @@ jobs:
           echo "--- runtime ---"
           ls -l rt
           file rt/python27/bin/python2.7 rt/toolchain/bin/gccc
-          echo "--- toolchain bin ---"
-          ls -l rt/toolchain/bin
+
+      - name: Patch converter for SL group references
+        run: |
+          python3 ci/patch_chowdren.py rt
 
       - name: Fetch game exe
         run: |
@@ -46,6 +48,7 @@ jobs:
 
       - name: Convert + compile (on-device pipeline)
         run: |
+          set -o pipefail
           export CHOWDREN_WORKERS=4
           export CHOWDREN_MAKE_JOBS=4
           rt/bin/chowdren-build \
@@ -54,7 +57,8 @@ jobs:
             --title "${{ inputs.title }}" \
             --no-launch 2>&1 | tee build.log
           echo "--- results ---"
-          ls -l port/build | head -30
+          ls -l port/build | head -40
+          test -x port/build/Chowdren || { echo "NO BINARY PRODUCED"; exit 1; }
 
       - name: Upload build output
         if: always()
@@ -62,6 +66,9 @@ jobs:
         with:
           name: sl-chowdren-build
           path: |
-            port/build/**
+            port/build/Chowdren
+            port/build/Assets.dat
+            port/build/*.cpp
+            port/build/*.h
             build.log
           if-no-files-found: warn
