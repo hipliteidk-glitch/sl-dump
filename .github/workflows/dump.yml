@@ -75,7 +75,7 @@ jobs:
           Copy-Item "ct/Plugins/CTFAK.Decompiler/bin/Release/net6.0-windows/CTFAK.Decompiler.dll" "$cli/Plugins/" -Force
           $exe = (Resolve-Path "work/game.exe").Path
           Set-Location $cli
-          dotnet CTFAK.Cli.dll -path $exe -forcetype exe -tool "Dump Everything" -parameters "-log" -closeonfinish
+          .\CTFAK.Cli.exe -path $exe -forcetype exe -tool "Dump Everything" -parameters "-log" -closeonfinish
           Get-ChildItem -Recurse Dumps | Measure-Object -Property Length -Sum | Select-Object Count,Sum
       - uses: actions/upload-artifact@v4
         if: always()
