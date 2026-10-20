@@ -146,4 +146,24 @@ new = """class GroupActivated(ConditionWriter):
 """
 patch(SYSTEM, old, new, "system GroupActivated tolerant")
 
+# ---------------------------------------------------------------------------
+# 3. system.py: SL uses expressions/conditions this Chowdren build never
+#    mapped, so the generic fallback emits calls to non-existent functions.
+#       RandomRange(min, max)          -> randrange(min, max)
+#       CompareAlterableValueDouble    -> same as the int variant
+# ---------------------------------------------------------------------------
+old = """    'CompareAlterableValueInt' : make_comparison('alterables->values.get(%s)'),
+"""
+new = """    'CompareAlterableValueInt' : make_comparison('alterables->values.get(%s)'),
+    'CompareAlterableValueDouble' : make_comparison('alterables->values.get(%s)'),
+"""
+patch(SYSTEM, old, new, "system CompareAlterableValueDouble")
+
+old = """    'Random' : 'randrange_event',
+"""
+new = """    'Random' : 'randrange_event',
+    'RandomRange' : 'randrange',
+"""
+patch(SYSTEM, old, new, "system RandomRange")
+
 print("all Chowdren patches applied")
