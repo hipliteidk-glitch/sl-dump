@@ -166,4 +166,51 @@ new = """    'Random' : 'randrange_event',
 """
 patch(SYSTEM, old, new, "system RandomRange")
 
+# ---------------------------------------------------------------------------
+# 4. system.py: the Int/Double/'2'/'3' global-value variants (Fusion 2.5+
+#    "set global value" family) are not mapped in this build either.
+# ---------------------------------------------------------------------------
+old = """    'SetGlobalValue' : 'global_values->set',
+    'AddGlobalValue' : 'global_values->add',
+    'AddGlobalValueInt' : 'global_values->add',
+    'SubtractGlobalValue' : 'global_values->sub',
+"""
+new = """    'SetGlobalValue' : 'global_values->set',
+    'SetGlobalValueInt' : 'global_values->set',
+    'SetGlobalValue2' : 'global_values->set',
+    'SetGlobalValueDouble' : 'global_values->set',
+    'SetGlobalValue3' : 'global_values->set',
+    'AddGlobalValue' : 'global_values->add',
+    'AddGlobalValueInt' : 'global_values->add',
+    'AddGlobalValue2' : 'global_values->add',
+    'AddGlobalValueDouble' : 'global_values->add',
+    'AddGlobalValue3' : 'global_values->add',
+    'SubtractGlobalValue' : 'global_values->sub',
+    'SubtractGlobalValueInt' : 'global_values->sub',
+    'SubtractGlobalValue2' : 'global_values->sub',
+    'SubtractGlobalValueDouble' : 'global_values->sub',
+    'SubtractGlobalValue3' : 'global_values->sub',
+"""
+patch(SYSTEM, old, new, "system global value variants")
+
+old = """    'CompareGlobalValue' : make_comparison('global_values->get(%s)'),
+    'CompareGlobalValueIntEqual' : make_comparison('global_values->get(%s)'),
+    'CompareGlobalValueIntNotEqual' : make_comparison('global_values->get(%s)'),
+"""
+new = """    'CompareGlobalValue' : make_comparison('global_values->get(%s)'),
+    'CompareGlobalValueIntEqual' : make_comparison('global_values->get(%s)'),
+    'CompareGlobalValueIntNotEqual' : make_comparison('global_values->get(%s)'),
+    'CompareGlobalValueIntLessEqual' : make_comparison('global_values->get(%s)'),
+    'CompareGlobalValueIntLess' : make_comparison('global_values->get(%s)'),
+    'CompareGlobalValueIntGreaterEqual' : make_comparison('global_values->get(%s)'),
+    'CompareGlobalValueIntGreater' : make_comparison('global_values->get(%s)'),
+    'CompareGlobalValueDoubleEqual' : make_comparison('global_values->get(%s)'),
+    'CompareGlobalValueDoubleNotEqual' : make_comparison('global_values->get(%s)'),
+    'CompareGlobalValueDoubleLessEqual' : make_comparison('global_values->get(%s)'),
+    'CompareGlobalValueDoubleLess' : make_comparison('global_values->get(%s)'),
+    'CompareGlobalValueDoubleGreaterEqual' : make_comparison('global_values->get(%s)'),
+    'CompareGlobalValueDoubleGreater' : make_comparison('global_values->get(%s)'),
+"""
+patch(SYSTEM, old, new, "system global value condition variants")
+
 print("all Chowdren patches applied")
