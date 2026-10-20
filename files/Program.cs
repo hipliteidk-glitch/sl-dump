@@ -261,7 +261,7 @@ public class Program
                 {
                     int tool = -1;
                     for (int i = 0; i < availableTools.Count; i++)
-                        if (string.Equals(availableTools[i].Name, s, StringComparison.OrdinalIgnoreCase))
+                        if (string.Equals(availableTools[i].Name.Trim(), s.Trim(), StringComparison.OrdinalIgnoreCase))
                             tool = i;
 
                     if (tool == -1)
@@ -300,6 +300,7 @@ public class Program
             SafeClear();
                     ASCIIArt.DrawArt();
                     Console.WriteLine($"Execution of {selectedTool.Name} finished in {executeStopwatch.Elapsed.TotalSeconds} seconds");
+                    break;
                 }
                 else if (s == "-tool")
                     foundarg = true;
