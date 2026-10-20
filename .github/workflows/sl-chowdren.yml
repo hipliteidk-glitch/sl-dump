@@ -48,12 +48,9 @@ jobs:
           curl -L --retry 3 --retry-delay 5 -o libc6.deb \
             "https://deb.debian.org/debian/pool/main/g/glibc/libc6_2.31-13+deb11u11_arm64.deb"
           ls -l libc6.deb
-          7z x -y libc6.deb -ort/libc231 > /dev/null
-          cd rt/libc231
-          7z x -y data.tar.xz > /dev/null
-          if [ -f data.tar ]; then 7z x -y data.tar > /dev/null; fi
-          ls -l lib/aarch64-linux-gnu/libc.so.6 lib/aarch64-linux-gnu/ld-linux-aarch64.so.1
-          ls lib/aarch64-linux-gnu | head -20
+          dpkg-deb -x libc6.deb rt/libc231
+          ls -l rt/libc231/lib/aarch64-linux-gnu/libc.so.6 rt/libc231/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1
+          ls rt/libc231/lib/aarch64-linux-gnu | head -20
 
       - name: Fetch game exe
         run: |
