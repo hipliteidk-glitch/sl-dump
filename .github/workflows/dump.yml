@@ -24,7 +24,6 @@ jobs:
           Copy-Item files/NativeLib.cs ct/Core/CTFAK.Core/Utils/NativeLib.cs -Force
           Copy-Item files/ExeFileReader.cs ct/Core/CTFAK.Core/EXE/ExeFileReader.cs -Force
           Copy-Item native/* ct/Core/CTFAK-Native/ -Force
-          Copy-Item ct/Core/CTFAK.Core/Resources/EditBox.png ct/Core/CTFAK.Core/Resources/Editbox.png -Force
       - name: Build
         shell: pwsh
         run: |
