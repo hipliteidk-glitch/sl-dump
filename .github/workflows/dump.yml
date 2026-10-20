@@ -42,8 +42,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "zlib cmake configure failed" }
           cmake --build zlib-build --config Release
           if ($LASTEXITCODE -ne 0) { throw "zlib build failed" }
-          $zlib = Get-ChildItem zlib-build -Recurse -Filter zlib1.dll | Select-Object -First 1
-          if (-not $zlib) { $zlib = Get-ChildItem zlib-build -Recurse -Filter zlib*.dll | Select-Object -First 1 }
+          $zlib = Get-ChildItem -Path zlib-build -Recurse -File | Where-Object { $_.Name -in @('zlib1.dll','libz.dll','zlib.dll') } | Select-Object -First 1
           if (-not $zlib) { throw "zlib dll was not produced" }
           Copy-Item $zlib.FullName "$cli/x64/zlibwapi.dll" -Force
 
