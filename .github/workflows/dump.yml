@@ -37,9 +37,14 @@ jobs:
           $cliFull = (Resolve-Path $cli).Path
 
           # zlib: Joveler.Compression.ZLib expects zlibwapi.dll on Windows
-          & "C:\vcpkg\vcpkg.exe" install zlib:x64-windows
-          if (-not (Test-Path "C:\vcpkg\installed\x64-windows\bin\zlib1.dll")) { throw "zlib1.dll not found after vcpkg install" }
-          Copy-Item "C:\vcpkg\installed\x64-windows\bin\zlib1.dll" "$cli/x64/zlibwapi.dll" -Force
+          git clone --depth 1 --branch v1.3.1 https://github.com/madler/zlib.git zlib-src
+          cmake -S zlib-src -B zlib-build -A x64
+          if ($LASTEXITCODE -ne 0) { throw "zlib cmake configure failed" }
+          cmake --build zlib-build --config Release
+          if ($LASTEXITCODE -ne 0) { throw "zlib build failed" }
+          $zlib = Get-ChildItem zlib-build -Recurse -Filter zlib1.dll | Select-Object -First 1
+          if (-not $zlib) { throw "zlib1.dll was not produced" }
+          Copy-Item $zlib.FullName "$cli/x64/zlibwapi.dll" -Force
 
           # CTFAK-Native is a .vcxproj; dotnet build does not compile it
           $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
