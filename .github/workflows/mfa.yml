@@ -44,7 +44,7 @@ jobs:
           Copy-Item "ct/Plugins/CTFAK.Decompiler/bin/Release/net6.0-windows/CTFAK.Decompiler.dll" "$cli/Plugins/" -Force
           $exe = (Resolve-Path "work/game.exe").Path
           Set-Location $cli
-          Copy-Item "$PWD/../../../../template.mfa" "$PWD/template.mfa" -Force
+          Copy-Item "$env:GITHUB_WORKSPACE/template.mfa" "$PWD/template.mfa" -Force
           Get-Item template.mfa | Select-Object Length
           "1" | dotnet CTFAK.Cli.dll -path $exe -parameters "-log"
           Get-ChildItem -Recurse -Filter *.mfa | Select-Object FullName,Length
