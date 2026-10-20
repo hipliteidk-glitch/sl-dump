@@ -1,0 +1,67 @@
+name: sl-chowdren
+on:
+  workflow_dispatch:
+    inputs:
+      exe_url:
+        description: 'URL to the Sister Location exe'
+        required: true
+      title:
+        description: 'Game title'
+        required: false
+        default: "Five Nights at Freddy's: Sister Location"
+
+jobs:
+  build:
+    # Public repo: GitHub-hosted arm64 runner (native aarch64, no qemu)
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install deps
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y p7zip-full file
+          df -h /
+
+      - name: Fetch Chowdren aarch64 toolchain
+        run: |
+          mkdir -p rt port/gamedata port/patch
+          curl -L --retry 3 --retry-delay 5 -o rt.7z \
+            "https://raw.githubusercontent.com/PortsMaster/PortMaster-New/main/ports/fnaf1/fnaf1/patch/decompiler.7z"
+          ls -l rt.7z
+          7z x -y rt.7z -ort > /dev/null
+          chmod -R +x rt/bin rt/toolchain/bin rt/python27/bin 2>/dev/null || true
+          echo "--- runtime ---"
+          ls -l rt
+          file rt/python27/bin/python2.7 rt/toolchain/bin/gccc
+          echo "--- toolchain bin ---"
+          ls -l rt/toolchain/bin
+
+      - name: Fetch game exe
+        run: |
+          curl -L --retry 3 --retry-delay 5 -o port/gamedata/sl.exe "${{ inputs.exe_url }}"
+          ls -l port/gamedata/sl.exe
+          file port/gamedata/sl.exe
+
+      - name: Convert + compile (on-device pipeline)
+        run: |
+          export CHOWDREN_WORKERS=4
+          export CHOWDREN_MAKE_JOBS=4
+          rt/bin/chowdren-build \
+            --game-dir "$PWD/port" \
+            --exe sl.exe \
+            --title "${{ inputs.title }}" \
+            --no-launch 2>&1 | tee build.log
+          echo "--- results ---"
+          ls -l port/build | head -30
+
+      - name: Upload build output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sl-chowdren-build
+          path: |
+            port/build/**
+            build.log
+          if-no-files-found: warn
