@@ -77,6 +77,13 @@ jobs:
           ls -l port/gamedata/sl.exe
           file port/gamedata/sl.exe
           sha256sum port/gamedata/sl.exe
+          # Pinned to the asset's own digest, which in turn matches the
+          # original file on disk byte for byte (366,838,254 bytes). A
+          # truncated download, a swapped release asset, or a bad cache
+          # restore now aborts the build instead of silently converting the
+          # wrong bytes into a port that looks fine until it runs.
+          echo "cd21020de386b0de4885c13ec9ed87a23ce868d593045d96c45c6e68a9d3750a  port/gamedata/sl.exe" \
+            | sha256sum -c -
 
       - name: Convert + compile (on-device pipeline)
         run: |
