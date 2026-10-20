@@ -59,6 +59,11 @@ jobs:
           echo "--- results ---"
           ls -l port/build | head -40
           test -x port/build/Chowdren || { echo "NO BINARY PRODUCED"; exit 1; }
+          if grep -q 'left as MP3' build.log; then
+            echo "ERROR: some sounds could not be transcoded to OGG"
+            grep 'left as MP3' build.log | tail -1
+            exit 1
+          fi
           echo "--- required glibc versions (ArkOS target is >= 2.34) ---"
           strings -a port/build/Chowdren | grep -o 'GLIBC_2\.[0-9]*' | sort -uV | tail -5
 

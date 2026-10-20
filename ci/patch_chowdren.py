@@ -234,11 +234,34 @@ new = """    fp = StringIO()
     wav.close()
     return fp.getvalue()
 
+_ffmpeg_probed = []
+
 def transcode_mp3(data):
     # ffmpeg skips the zero padding Fusion puts in front of the MP3 frames.
     import shutil
     import subprocess
     import tempfile
+
+    # chowdren-build exports LD_LIBRARY_PATH with the runtime's own
+    # toolchain/lib, which ships an old libfreetype. The system libharfbuzz
+    # then fails to resolve FT_Get_Color_Glyph_Layer and ffmpeg dies with
+    # exit 127 before it ever reads the input. ffmpeg needs none of the
+    # runtime libraries, so give it a pristine loader path.
+    env = dict(os.environ)
+    for key in ('LD_LIBRARY_PATH', 'LD_PRELOAD', 'DYLD_LIBRARY_PATH'):
+        env.pop(key, None)
+
+    if not _ffmpeg_probed:
+        _ffmpeg_probed.append(True)
+        try:
+            proc = subprocess.Popen(['ffmpeg', '-version'],
+                                    stdout=subprocess.PIPE,
+                                    stderr=subprocess.STDOUT, env=env)
+            ver = proc.communicate()[0] or ''
+            print 'ffmpeg: %s' % (ver.splitlines()[0] if ver else 'no output')
+        except Exception as exc:
+            print 'ERROR: ffmpeg is not usable: %s' % (exc,)
+
     folder = tempfile.mkdtemp(prefix='chowdren-mp3-')
     src = os.path.join(folder, 'in.mp3')
     dst = os.path.join(folder, 'out.ogg')
@@ -246,11 +269,20 @@ def transcode_mp3(data):
         fp = open(src, 'wb')
         fp.write(str(data))
         fp.close()
-        subprocess.check_call(['ffmpeg', '-v', 'error', '-y', '-i', src,
-                               '-c:a', 'libvorbis', '-q:a', '4', dst])
+        cmd = ['ffmpeg', '-nostdin', '-v', 'error', '-y', '-i', src,
+               '-c:a', 'libvorbis', '-q:a', '4', dst]
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE, env=env)
+        _, err = proc.communicate()
+        if proc.returncode != 0:
+            raise RuntimeError('ffmpeg exited %s (input %d bytes): %s' % (
+                proc.returncode, len(data), (err or '').strip()[:400]))
         fp = open(dst, 'rb')
         out = fp.read()
         fp.close()
+    except Exception as exc:
+        print 'WARNING: mp3->ogg transcode failed: %s' % (exc,)
+        return None
     finally:
         shutil.rmtree(folder, ignore_errors=True)
     return out
@@ -266,10 +298,39 @@ old = """                filename = '%s.%s' % (sound.name, extension)
 new = """                filename = '%s.%s' % (sound.name, extension)
                 data = fix_sound(sound.data, extension)
                 if extension == 'mp3':
-                    data = transcode_mp3(data)
-                    filename = '%s.ogg' % (sound.name,)
+                    ogg = transcode_mp3(data)
+                    if ogg is None:
+                        mp3_kept.append(sound.name)
+                    else:
+                        data = ogg
+                        filename = '%s.ogg' % (sound.name,)
                 filename, data = self.platform.get_sound(filename, data)
 """
 patch(CONVERTER, old, new, "converter mp3 to ogg")
+
+# The transcode must never abort the conversion: one bad sound would otherwise
+# hide the whole build (and the ffmpeg error) inside a 10 KB artifact.
+old = """        sound_set = set()
+        for game in self.games:
+"""
+new = """        sound_set = set()
+        mp3_kept = []
+        for game in self.games:
+"""
+patch(CONVERTER, old, new, "converter mp3 failure list")
+
+old = """                self.assets.add_sound(sound.name, new_extension, data)
+
+        # files
+"""
+new = """                self.assets.add_sound(sound.name, new_extension, data)
+
+        if mp3_kept:
+            print 'WARNING: %d sound(s) left as MP3, runtime cannot decode' \\
+                ' them: %s' % (len(mp3_kept), ', '.join(mp3_kept[:10]))
+
+        # files
+"""
+patch(CONVERTER, old, new, "converter mp3 failure summary")
 
 print("all Chowdren patches applied")
