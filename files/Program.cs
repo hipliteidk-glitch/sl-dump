@@ -261,8 +261,22 @@ public class Program
                 {
                     int tool = -1;
                     for (int i = 0; i < availableTools.Count; i++)
-                        if (availableTools[i].Name == s)
+                        if (string.Equals(availableTools[i].Name, s, StringComparison.OrdinalIgnoreCase))
                             tool = i;
+
+                    if (tool == -1)
+                    {
+                        Console.WriteLine($"Requested tool not found: '{s}'");
+                        foreach (var t in availableTools)
+                            Console.WriteLine($"Available tool: '{t.Name}'");
+                        for (int i = 0; i < availableTools.Count; i++)
+                            if (availableTools[i].Name.IndexOf("Dump", StringComparison.OrdinalIgnoreCase) >= 0)
+                            {
+                                tool = i;
+                                Console.WriteLine($"Falling back to: '{availableTools[i].Name}'");
+                                break;
+                            }
+                    }
 
                     if (tool == -1)
                         break;
