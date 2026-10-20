@@ -1,0 +1,55 @@
+name: dump-sl
+on:
+  workflow_dispatch:
+    inputs:
+      exe_url:
+        description: 'URL to download the EXE from'
+        required: true
+jobs:
+  dump:
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '6.0.x'
+      - name: Clone CTFAK2.0
+        shell: pwsh
+        run: git clone --depth 1 https://github.com/CTFAK/CTFAK2.0.git ct
+      - name: Apply patches
+        shell: pwsh
+        run: |
+          Copy-Item files/CTFAKCore.cs ct/Core/CTFAK.Core/CTFAKCore.cs -Force
+          Copy-Item files/NativeLib.cs ct/Core/CTFAK.Core/Utils/NativeLib.cs -Force
+          Copy-Item files/ExeFileReader.cs ct/Core/CTFAK.Core/EXE/ExeFileReader.cs -Force
+          Copy-Item native/* ct/Core/CTFAK-Native/ -Force
+          Copy-Item ct/Core/CTFAK.Core/Resources/EditBox.png ct/Core/CTFAK.Core/Resources/Editbox.png -Force
+      - name: Build
+        shell: pwsh
+        run: |
+          cd ct
+          dotnet build CTFAK.sln -c Release
+      - name: Download EXE
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path work | Out-Null
+          curl.exe -L --retry 3 --retry-delay 5 -o work/game.exe "${{ inputs.exe_url }}"
+          Get-Item work/game.exe | Select-Object Length
+      - name: Dump
+        shell: pwsh
+        run: |
+          $cli = "ct/Interface/CTFAK.Cli/bin/Release/net6.0-windows"
+          New-Item -ItemType Directory -Force -Path "$cli/Plugins" | Out-Null
+          Copy-Item "ct/Plugins/Dumper/bin/Release/net6.0-windows/Dumper.dll" "$cli/Plugins/" -Force
+          Copy-Item "ct/Plugins/CTFAK.Decompiler/bin/Release/net6.0-windows/CTFAK.Decompiler.dll" "$cli/Plugins/" -Force
+          Set-Location $cli
+          "2" | dotnet CTFAK.Cli.dll -path (Resolve-Path ../../../../work/game.exe) -parameters "-log"
+          Get-ChildItem -Recurse Dumps | Measure-Object -Property Length -Sum | Select-Object Count,Sum
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sl-dump
+          path: |
+            ct/Interface/CTFAK.Cli/bin/Release/net6.0-windows/Dumps*/**
+          if-no-files-found: warn
