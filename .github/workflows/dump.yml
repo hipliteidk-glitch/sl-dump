@@ -23,6 +23,8 @@ jobs:
           Copy-Item files/CTFAKCore.cs ct/Core/CTFAK.Core/CTFAKCore.cs -Force
           Copy-Item files/NativeLib.cs ct/Core/CTFAK.Core/Utils/NativeLib.cs -Force
           Copy-Item files/ExeFileReader.cs ct/Core/CTFAK.Core/EXE/ExeFileReader.cs -Force
+          Copy-Item files/ASCIIArt.cs ct/Interface/CTFAK.Cli/ASCIIArt.cs -Force
+          Copy-Item files/Program.cs ct/Interface/CTFAK.Cli/Program.cs -Force
           Copy-Item native/* ct/Core/CTFAK-Native/ -Force
       - name: Build
         shell: pwsh
@@ -73,7 +75,7 @@ jobs:
           Copy-Item "ct/Plugins/CTFAK.Decompiler/bin/Release/net6.0-windows/CTFAK.Decompiler.dll" "$cli/Plugins/" -Force
           $exe = (Resolve-Path "work/game.exe").Path
           Set-Location $cli
-          "2" | dotnet CTFAK.Cli.dll -path $exe -parameters "-log"
+          dotnet CTFAK.Cli.dll -path $exe -forcetype exe -tool "Dump Everything" -parameters "-log" -closeonfinish
           Get-ChildItem -Recurse Dumps | Measure-Object -Property Length -Sum | Select-Object Count,Sum
       - uses: actions/upload-artifact@v4
         if: always()
