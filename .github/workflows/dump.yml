@@ -29,6 +29,30 @@ jobs:
         run: |
           cd ct
           dotnet build CTFAK.sln -c Release
+      - name: Setup native deps
+        shell: pwsh
+        run: |
+          $cli = "ct/Interface/CTFAK.Cli/bin/Release/net6.0-windows"
+          New-Item -ItemType Directory -Force -Path "$cli/x64" | Out-Null
+          $cliFull = (Resolve-Path $cli).Path
+
+          # zlib: Joveler.Compression.ZLib expects zlibwapi.dll on Windows
+          & "C:\vcpkg\vcpkg.exe" install zlib:x64-windows
+          if (-not (Test-Path "C:\vcpkg\installed\x64-windows\bin\zlib1.dll")) { throw "zlib1.dll not found after vcpkg install" }
+          Copy-Item "C:\vcpkg\installed\x64-windows\bin\zlib1.dll" "$cli/x64/zlibwapi.dll" -Force
+
+          # CTFAK-Native is a .vcxproj; dotnet build does not compile it
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $msbuild = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -find "MSBuild\**\Bin\MSBuild.exe" | Select-Object -First 1
+          if (-not $msbuild) { throw "MSBuild not found" }
+          Write-Host "Using MSBuild: $msbuild"
+          & $msbuild "ct/Core/CTFAK-Native/CTFAK-Native.vcxproj" /p:Configuration=Release /p:Platform=x64 "/p:OutDir=$cliFull\x64\"
+          if ($LASTEXITCODE -ne 0) { throw "CTFAK-Native build failed" }
+          if (-not (Test-Path "$cli/x64/CTFAK-Native.dll")) { throw "CTFAK-Native.dll was not produced" }
+
+          # P/Invoke resolves by filename from the app directory
+          Copy-Item "$cli/x64/CTFAK-Native.dll" "$cli/CTFAK-Native.dll" -Force
+          Get-ChildItem "$cli/x64" | Select-Object Name, Length
       - name: Download EXE
         shell: pwsh
         run: |
