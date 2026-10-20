@@ -213,4 +213,63 @@ new = """    'CompareGlobalValue' : make_comparison('global_values->get(%s)'),
 """
 patch(SYSTEM, old, new, "system global value condition variants")
 
+# ---------------------------------------------------------------------------
+# 5. converter.py: Fusion stores 'MOD' sounds as MP3. The runtime decoder only
+#    understands WAV/OGG and segfaults on anything else (create_decoder returns
+#    NULL), so transcode every MP3 to OGG while converting.
+# ---------------------------------------------------------------------------
+old = """    fp = StringIO()
+    wav = wave.open(fp, 'wb')
+    wav.setparams((channels, 2, rate, frame_count, comptype, compname))
+    wav.writeframesraw(frames)
+    wav.close()
+    return fp.getvalue()
+
+class Converter(object):
+"""
+new = """    fp = StringIO()
+    wav = wave.open(fp, 'wb')
+    wav.setparams((channels, 2, rate, frame_count, comptype, compname))
+    wav.writeframesraw(frames)
+    wav.close()
+    return fp.getvalue()
+
+def transcode_mp3(data):
+    # ffmpeg skips the zero padding Fusion puts in front of the MP3 frames.
+    import shutil
+    import subprocess
+    import tempfile
+    folder = tempfile.mkdtemp(prefix='chowdren-mp3-')
+    src = os.path.join(folder, 'in.mp3')
+    dst = os.path.join(folder, 'out.ogg')
+    try:
+        fp = open(src, 'wb')
+        fp.write(str(data))
+        fp.close()
+        subprocess.check_call(['ffmpeg', '-v', 'error', '-y', '-i', src,
+                               '-c:a', 'libvorbis', '-q:a', '4', dst])
+        fp = open(dst, 'rb')
+        out = fp.read()
+        fp.close()
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+    return out
+
+class Converter(object):
+"""
+patch(CONVERTER, old, new, "converter transcode_mp3 helper")
+
+old = """                filename = '%s.%s' % (sound.name, extension)
+                data = fix_sound(sound.data, extension)
+                filename, data = self.platform.get_sound(filename, data)
+"""
+new = """                filename = '%s.%s' % (sound.name, extension)
+                data = fix_sound(sound.data, extension)
+                if extension == 'mp3':
+                    data = transcode_mp3(data)
+                    filename = '%s.ogg' % (sound.name,)
+                filename, data = self.platform.get_sound(filename, data)
+"""
+patch(CONVERTER, old, new, "converter mp3 to ogg")
+
 print("all Chowdren patches applied")

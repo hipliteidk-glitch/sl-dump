@@ -21,7 +21,7 @@ jobs:
       - name: Install deps
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y p7zip-full file
+          sudo apt-get install -y p7zip-full file ffmpeg
           df -h /
 
       - name: Fetch Chowdren aarch64 toolchain
