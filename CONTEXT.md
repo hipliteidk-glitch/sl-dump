@@ -1,6 +1,6 @@
 # Sister Location on R36S — working context
 
-_Last updated: 2026-10-20 (runtime fix verified on device)_
+_Last updated: 2026-10-20 (playable: Night 1 running at 60 FPS on device)_
 
 ## Links
 
@@ -20,11 +20,12 @@ then install it as a PortMaster-style port.
 |---|---|
 | Conversion pipeline | working (CI, ~11.5 min, `ubuntu-24.04-arm`) |
 | Port installed on console | yes - `/roms/ports/Sister Location.sh` + `/roms/ports/sl/` |
-| Launch | works - warning screen + intro scene render at ~30 FPS |
+| Launch | works - warning screen, menu, Night 1 |
 | Startup crash | fixed (MP3 sounds transcoded to OGG) |
 | White canvas | fixed at runtime by `screenfix.so` (see below) |
-| Controls | `controls.ini` maps A = left click, d-pad/left stick = mouse |
-| Playtest | in progress - advanced past the warning screen to frame 1 |
+| Menu / in-game performance | fixed - `LIBGL_BATCH=100` (see below) |
+| Mouse input | fixed at runtime by `mousefix.so` (see below) |
+| Playtest | **in game** - Night 1 + HandUnit keypad, 60 FPS |
 
 
 ## The startup crash (diagnosed)
@@ -116,7 +117,73 @@ Launcher changes: `LD_PRELOAD="$GAMEDIR/screenfix.so:$GAMEDIR/gl4es.aarch64/libG
 and a backlight raise to 120/160 (a cold boot can leave the panel at 8/160, which
 looks identical to a dead port).
 
-## Repo / CI
+## The menu framerate (solved)
+
+The main menu is a screen-texture feedback effect: it draws ~940 small quads
+(6 vertices each) every frame, 260k draws in 276 frames. Issued one at a time
+that costs 80-120 ms per frame on this SoC (`Draw took 0.09`), i.e. 6-11 FPS
+exactly while the pointer is over the menu. gl4es' batcher collapses them:
+
+```
+export LIBGL_BATCH=100
+LIBGL: Trying to batch subsequent glDrawXXXX of size between 0 and 10000 vertices
+```
+
+With batching the same scene draws in 5-14 ms and holds 60 FPS. Gameplay
+(Night 1, keypad) is 60 FPS with `Draw took 0.010-0.013`.
+
+Note: the effect *is* the menu picture. Suppressing the canvas-texture draws
+makes the screen black, so batching (not removal) is the fix.
+
+## Input (solved)
+
+The runtime in this build was linked against a gamepad-only platform layer and
+has **no working mouse code at all**:
+
+- `platform_poll_events()` handles quit / keyboard / joystick and controller
+  button events; there is no `SDL_MOUSEMOTION` or `SDL_MOUSEBUTTON*` case.
+  It is the only caller of `SDL_PollEvent` in the binary.
+- `GameManager::on_mouse(int, bool)` has **no callers** (verified with objdump).
+- `platform_get_mouse_pos(int*, int*)` is a stub: it stores 640/360, the centre
+  of the 1280x720 canvas, and returns. The binary imports no mouse-position API
+  at all (only `SDL_ShowCursor`).
+- `update_joystick()` is an empty stub.
+
+So the pointer is frozen at the centre of the screen and menu entries can never
+be clicked. The game is otherwise mouse-driven (look around, click, the HandUnit
+keypad), and `controls.ini` maps A = `mouse_left`, d-pad = `mouse_movement`.
+
+`mousefix.so` (`native/mousefix.c`) restores the missing pieces at runtime:
+
+1. interposes `SDL_PollEvent`, watches the real mouse events that gptokeyb2
+   produces from the gamepad, and keeps a cursor in game space
+   (`game = (2x, 2(y-60))`, matching the letterboxed render);
+2. patches `platform_get_mouse_pos` (file offset `0x153a34`) with a 16-byte
+   `ldr x16,#8; br x16; .quad` jump to its own implementation, so the engine's
+   mouse object reports the real cursor;
+3. calls `GameManager::on_mouse(manager, button, pressed)` (offset `0x13ade4`,
+   `this` = the global `manager` at `0x6834c8`) on press/release.
+
+Constraints learned the hard way:
+
+- `mousefix.so` must be **first** in `LD_PRELOAD` so it sees events before any
+  other interposer.
+- It only patches when `/proc/self/exe` is `Chowdren`; `LD_PRELOAD` is inherited
+  by `stdbuf`/`timeout`/`tee` and patching those at the game's offsets crashes
+  them instantly.
+- `on_mouse` is a member function - passing a button number as `this` segfaults
+  inside `InputList::add`.
+- Press and release must be separated by frames: `on_mouse` only adds/removes
+  the button in an InputList, so a press+release in one event batch cancels out.
+
+Verified with synthetic input: clicking the visible NEW GAME at window
+(462,166) starts the game (`Setting frame: 3`); clicking an empty spot
+(100,400) does not, so the coordinate mapping is right.
+
+Launcher changes: `LD_PRELOAD="$GAMEDIR/mousefix.so:$GAMEDIR/screenfix.so:<gl4es>"`
+and `LIBGL_BATCH=100`.
+
+
 
 - Repo: `hipliteidk-glitch/sl-dump` (public), clone on the phone at `~/sl-dump`
 - Workflow: `.github/workflows/sl-chowdren.yml` (workflow_dispatch, inputs `exe_url`, `title`)
@@ -176,18 +243,21 @@ Install path:
 
 ## Next steps
 
-1. Playtest past the intro: the warning screen waits for a click; A advances it.
-   Watch `/roms/ports/sl/log.txt` for `Setting frame:` changes and crashes.
-2. Clean up the console: `/roms` is at 98% (1.9 GB free). Remove
-   `Assets.dat.old-mp3` (219 MB), `Chowdren.old`, the diagnostic shims
-   (`capshim/clearprobe/drawshim/enabletex/fbprobe/inject/nulltex/pfb/potshim/
-   redtint/rgba4444/stateshim/texcheck/texshim .so`), `/roms/cap/*.ppm`, and the
-   `/roms/*.c|*.py|*.log` scratch files. Keep `screenfix.so` + `screenfix.c`.
-3. Push the repo. `ci/patch_direct.py` + the workflow step are committed locally
-   but GitHub push needs credentials (the box has no stored token). If CI is ever
-   rebuilt, the source-level patch removes the FBO entirely; `screenfix.so` would
-   still be needed for the `GL_TEXTURE_2D` fault.
+1. Hand over to the user for a real-pad test: d-pad moves the cursor, A clicks,
+   B is right click, X = space, Start = enter. Watch
+   `/roms/ports/sl/log.txt` for `mousefix:` lines and `Setting frame:` changes.
+2. Tune if needed: `controls.ini` has `mouse_scale = 6114`, `mouse_delay = 16`
+   (cursor speed/acceleration) - lower `mouse_scale` for a slower cursor.
+3. Push the repo. `ci/patch_direct.py`, `native/*`, the launcher copy and this
+   document are committed locally but GitHub push needs credentials (the box has
+   no stored token). If CI is ever rebuilt, the source-level patch removes the
+   FBO entirely; `screenfix.so` would still be needed for the `GL_TEXTURE_2D`
+   fault, and `mousefix.so` for input.
 4. Keep the converted assets local - do not publish them.
+
+Console state: `/roms` is at 98% (2.1 GB free) for unrelated content; the port
+itself is 397 MB (`Assets.dat` + `Chowdren` + shims). Old assets and every
+diagnostic shim have been removed.
 
 ## Known warnings (not fatal yet)
 
