@@ -269,13 +269,27 @@ public class Program
                         Console.WriteLine($"Requested tool not found: '{s}'");
                         foreach (var t in availableTools)
                             Console.WriteLine($"Available tool: '{t.Name}'");
-                        for (int i = 0; i < availableTools.Count; i++)
-                            if (availableTools[i].Name.IndexOf("Dump", StringComparison.OrdinalIgnoreCase) >= 0)
-                            {
+
+                        string wanted = s.Replace(" ", "").Trim().ToLowerInvariant();
+                        for (int i = 0; i < availableTools.Count && tool == -1; i++)
+                        {
+                            string candidate = availableTools[i].Name.Replace(" ", "").Trim().ToLowerInvariant();
+                            if (candidate.Contains(wanted) || wanted.Contains(candidate))
                                 tool = i;
-                                Console.WriteLine($"Falling back to: '{availableTools[i].Name}'");
-                                break;
-                            }
+                        }
+                        if (tool == -1)
+                        {
+                            string hint = wanted.Contains("mfa") ? "mfa" : (wanted.Contains("dump") ? "dump" : "");
+                            if (hint.Length > 0)
+                                for (int i = 0; i < availableTools.Count; i++)
+                                    if (availableTools[i].Name.IndexOf(hint, StringComparison.OrdinalIgnoreCase) >= 0)
+                                    {
+                                        tool = i;
+                                        break;
+                                    }
+                        }
+                        if (tool != -1)
+                            Console.WriteLine($"Falling back to: '{availableTools[tool].Name}'");
                     }
 
                     if (tool == -1)
