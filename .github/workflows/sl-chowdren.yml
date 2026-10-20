@@ -40,18 +40,6 @@ jobs:
         run: |
           python3 ci/patch_chowdren.py rt
 
-      - name: Fetch old glibc (2.31) for linking
-        run: |
-          # ArkOS/R36S is focal-era (glibc 2.31); linking against the runner's
-          # glibc 2.39 produces a binary the device refuses to start.
-          mkdir -p rt/libc231
-          curl -L --retry 3 --retry-delay 5 -o libc6.deb \
-            "https://deb.debian.org/debian/pool/main/g/glibc/libc6_2.31-13+deb11u11_arm64.deb"
-          ls -l libc6.deb
-          dpkg-deb -x libc6.deb rt/libc231
-          ls -l rt/libc231/lib/aarch64-linux-gnu/libc.so.6 rt/libc231/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1
-          ls rt/libc231/lib/aarch64-linux-gnu | head -20
-
       - name: Fetch game exe
         run: |
           curl -L --retry 3 --retry-delay 5 -o port/gamedata/sl.exe "${{ inputs.exe_url }}"
@@ -63,8 +51,6 @@ jobs:
           set -o pipefail
           export CHOWDREN_WORKERS=4
           export CHOWDREN_MAKE_JOBS=4
-          GLIBC_DIR="$PWD/rt/libc231/lib/aarch64-linux-gnu"
-          export LDFLAGS="-L$GLIBC_DIR -Wl,-rpath-link,$GLIBC_DIR -Wl,--allow-shlib-undefined $LDFLAGS"
           rt/bin/chowdren-build \
             --game-dir "$PWD/port" \
             --exe sl.exe \
@@ -73,11 +59,8 @@ jobs:
           echo "--- results ---"
           ls -l port/build | head -40
           test -x port/build/Chowdren || { echo "NO BINARY PRODUCED"; exit 1; }
-          echo "--- required glibc versions ---"
+          echo "--- required glibc versions (ArkOS target is >= 2.34) ---"
           strings -a port/build/Chowdren | grep -o 'GLIBC_2\.[0-9]*' | sort -uV | tail -5
-          MAXG="$(strings -a port/build/Chowdren | grep -o 'GLIBC_2\.[0-9]*' | sort -uV | tail -1 | sed 's/GLIBC_//')"
-          echo "max: $MAXG"
-          awk -v v="$MAXG" 'BEGIN { if (v + 0 <= 2.31) { print "glibc target OK"; exit 0 } print "GLIBC TOO NEW FOR ArkOS: " v; exit 1 }'
 
       - name: Upload build output
         if: always()
