@@ -1,6 +1,6 @@
 # Sister Location on R36S — working context
 
-_Last updated: 2026-10-20 (during build run 39413575606)_
+_Last updated: 2026-10-20 (runtime fix verified on device)_
 
 ## Links
 
@@ -19,10 +19,12 @@ then install it as a PortMaster-style port.
 | Item | State |
 |---|---|
 | Conversion pipeline | working (CI, ~11.5 min, `ubuntu-24.04-arm`) |
-| Port installed on console | yes — `/roms/ports/Sister Location.sh` + `/roms/ports/sl/` |
-| First launch | **segfaults at startup** (audio, see below) |
-| Fix | converter now transcodes MP3→OGG; build running |
-| Console | online, ES running |
+| Port installed on console | yes - `/roms/ports/Sister Location.sh` + `/roms/ports/sl/` |
+| Launch | works - warning screen + intro scene render at ~30 FPS |
+| Startup crash | fixed (MP3 sounds transcoded to OGG) |
+| White canvas | fixed at runtime by `screenfix.so` (see below) |
+| Controls | `controls.ini` maps A = left click, d-pad/left stick = mouse |
+| Playtest | in progress - advanced past the warning screen to frame 1 |
 
 
 ## The startup crash (diagnosed)
@@ -56,7 +58,7 @@ SIGSEGV
 `Assets.dat` audit (92 sounds): **43 x type 3 (MP3, zero-padded)**, 49 x type 1 (WAV),
 0 x OGG. ffmpeg decodes the padded MP3s fine (tested on the phone).
 
-## The fix (committed, build in progress)
+## The startup crash fix (committed)
 
 `ci/patch_chowdren.py` gained two patches:
 
@@ -70,12 +72,56 @@ Workflow installs `ffmpeg` in the deps step.
 Commit: `50c3257` — *sl: transcode Fusion MOD/MP3 sounds to OGG …*
 Run: <https://github.com/hipliteidk-glitch/sl-dump/actions/runs/39413575606>
 
+## The white canvas (solved)
+
+With the audio crash gone the game ran at a steady 30-60 FPS but presented a flat
+white canvas. Two independent faults were found on-device, both fixed at runtime by
+`screenfix.so` (`native/screenfix.c`, installed as `/roms/ports/sl/screenfix.so`):
+
+**1. The screen FBO is never complete.** Chowdren renders into a 1280x720
+framebuffer and composites it to the window. On this GLES1/gl4es stack:
+
+```
+glGenFramebuffersEXT -> 1
+glBindFramebufferEXT(1)
+glFramebufferTexture2DEXT(tex=1)  -> status 0x0, err 0x500 (GL_INVALID_ENUM)
+later glCheckFramebufferStatus    -> 0x8CD7 (INCOMPLETE_MISSING_ATTACHMENT)
+```
+
+All draws into it are dropped (`0x506`), and the composite samples an empty
+texture. A clear-colour probe confirmed the white is content, not a clear.
+The fnaf4 port never uses an FBO, which is why it works.
+
+`screenfix.so` interposes `SDL_GL_GetProcAddress` (Chowdren resolves the FBO entry
+points through it, so an `LD_PRELOAD` of `glBindFramebufferEXT` is never reached),
+keeps every framebuffer binding on the window, ignores the attachment, and reports
+`GL_FRAMEBUFFER_COMPLETE`. It also remaps `glViewport(0,0,1280,720)` to the
+aspect-correct `(0,60,640,360)` letterbox and suppresses the present-phase clear
+and composite so they cannot erase the frame.
+
+**2. Texturing is never enabled.** Chowdren calls `glBindTexture` but never
+`glEnable(GL_TEXTURE_2D)`; it expects its shader to sample textures, and gl4es does
+not run that shader. Every quad therefore paints solid `glColor` white. The shim
+enables `GL_TEXTURE_2D` before each draw, after which textures sample correctly
+(the composite went from white to the canvas' real contents).
+
+Ruled out by measurement: RGBA4444 uploads, NPOT forcing, texture copy,
+alpha/blend hacks, red-tinting, zero-filling NULL uploads, `LIBGL_FBOFORCETEX`,
+shader compile errors, and the gl4es binary itself (byte-identical to fnaf4's).
+
+Captured proof: warning screen (`sl-fix/f0420.png`), intro scene
+(`sl-fix/f0840.png`), both 640x360 inside black bars.
+
+Launcher changes: `LD_PRELOAD="$GAMEDIR/screenfix.so:$GAMEDIR/gl4es.aarch64/libGL.so.1"`
+and a backlight raise to 120/160 (a cold boot can leave the panel at 8/160, which
+looks identical to a dead port).
+
 ## Repo / CI
 
 - Repo: `hipliteidk-glitch/sl-dump` (public), clone on the phone at `~/sl-dump`
 - Workflow: `.github/workflows/sl-chowdren.yml` (workflow_dispatch, inputs `exe_url`, `title`)
 - Converter patches: `ci/patch_chowdren.py`
-- Artifact: `sl-chowdren-build` → `Chowdren` (~8.4 MB), `Assets.dat` (~220 MB), generated
+- Artifact: `sl-chowdren-build` → `Chowdren` (~8.4 MB), `Assets.dat` (~388 MB), generated
   `events_*.cpp`, headers, `build.log`
 - Source exe used for conversion:
   `https://halifax-nor-bath-controversial.trycloudflare.com/sister-location-classic-edition.exe`
@@ -130,16 +176,21 @@ Install path:
 
 ## Next steps
 
-1. Wait for run 39413575606 → download artifact to Windows.
-2. Push `Chowdren` + `Assets.dat` to the console (Windows → phone → console; phone needs
-   ~250 MB free, it is tight — delete old zips first).
-3. Re-run under gdb / launch from the Ports menu; watch `/roms/ports/sl/log.txt`.
-4. Expect possible follow-on runtime issues (events, shaders, group pointers);
-   rebuild via `gh workflow run sl-chowdren.yml` after patching the converter.
-5. Once it runs: tune `controls.ini` (gptokeyb2), keep the port local (do not publish
-   converted game assets).
+1. Playtest past the intro: the warning screen waits for a click; A advances it.
+   Watch `/roms/ports/sl/log.txt` for `Setting frame:` changes and crashes.
+2. Clean up the console: `/roms` is at 98% (1.9 GB free). Remove
+   `Assets.dat.old-mp3` (219 MB), `Chowdren.old`, the diagnostic shims
+   (`capshim/clearprobe/drawshim/enabletex/fbprobe/inject/nulltex/pfb/potshim/
+   redtint/rgba4444/stateshim/texcheck/texshim .so`), `/roms/cap/*.ppm`, and the
+   `/roms/*.c|*.py|*.log` scratch files. Keep `screenfix.so` + `screenfix.c`.
+3. Push the repo. `ci/patch_direct.py` + the workflow step are committed locally
+   but GitHub push needs credentials (the box has no stored token). If CI is ever
+   rebuilt, the source-level patch removes the FBO entirely; `screenfix.so` would
+   still be needed for the `GL_TEXTURE_2D` fault.
+4. Keep the converted assets local - do not publish them.
 
 ## Known warnings (not fatal yet)
 
 - `WARNING: DeactivateGroup: unknown group pointer 7432` — group not in the current
   event list; skipped at conversion, runtime effect unknown.
+

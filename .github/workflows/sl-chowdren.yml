@@ -49,6 +49,20 @@ jobs:
         run: |
           python3 ci/patch_chowdren.py rt
 
+      - name: Render directly to the screen (disable the screen FBO)
+        run: |
+          # Mali-G31 behind gl4es' GLES1 backend never completes Chowdren's
+          # WINDOW_WIDTH x WINDOW_HEIGHT screen FBO:
+          #   glCheckFramebufferStatus -> 0x8CD7 (INCOMPLETE_MISSING_ATTACHMENT)
+          # Every draw into it is dropped (0x506 INVALID_FRAMEBUFFER_OPERATION)
+          # and the composite samples an empty texture, so the port runs at a
+          # steady 30-60 FPS and presents a flat white canvas. The fnaf4 port hit
+          # the same wall and renders straight into the scaled viewport instead.
+          # This step fails fast, before the conversion, if the source differs.
+          python3 ci/patch_direct.py rt
+          echo "--- patched markers ---"
+          grep -rn 'direct-to-screen' rt --include=platform.cpp | head -10
+
       - name: Cache game exe
         uses: actions/cache@v4
         with:
