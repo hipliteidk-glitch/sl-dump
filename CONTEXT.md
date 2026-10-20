@@ -2,6 +2,12 @@
 
 _Last updated: 2026-10-20 (during build run 39413575606)_
 
+## Links
+
+- Raw (always current): https://raw.githubusercontent.com/hipliteidk-glitch/sl-dump/main/CONTEXT.md
+- GitHub view: https://github.com/hipliteidk-glitch/sl-dump/blob/main/CONTEXT.md
+- Mirrors (snapshot): https://paste.rs/CxM9r · https://dpaste.org/vBWnf
+
 ## Goal
 
 Run **FNAF: Sister Location** natively on the R36S (dArkOSRE, aarch64) by converting
